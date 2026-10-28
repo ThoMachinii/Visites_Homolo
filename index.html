@@ -53,10 +53,14 @@ function dirty(){try{return localStorage.getItem(DK)=="1"}catch(e){return false}
 function setDirty(v){try{v?localStorage.setItem(DK,"1"):localStorage.removeItem(DK)}catch(e){}}
 function setSt(t){sync.status=t;["st","st2"].forEach(function(i){var e=document.getElementById(i);if(e)e.textContent=t})}
 function save(){db.updatedAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}setDirty(true);push()}
-function rowsSheet(){var o=[];db.places.slice().sort(function(a,b){return a.name.localeCompare(b.name,"fr")}).forEach(function(p){["v1","v2"].forEach(function(k){var v=p[k];if(filled(v))o.push([p.name,p.gps||"",k.toUpperCase(),fmt(v.date),v.stade,v.comment])})});return o}
+function sortedPlaces(){return db.places.slice().sort(function(a,b){return a.name.localeCompare(b.name,"fr")})}
+function rowsAll(onlyVisited,gps){var o=[];sortedPlaces().forEach(function(p){if(onlyVisited&&!filled(p.v1)&&!filled(p.v2))return;["v1","v2"].forEach(function(k,i){var v=p[k],r=[i==0?p.name:""];if(gps)r.push(i==0?(p.gps||""):"");r.push(k.toUpperCase(),fmt(v.date),v.stade,v.comment);o.push(r)})});return o}
+function rowsSheet(){return rowsAll(false,true)}
 function push(){if(!CFG.url)return;clearTimeout(sync.t);setSt("⏳ envoi en attente…");sync.t=setTimeout(doPush,1500)}
 function doPush(){sync.t=null;if(!CFG.url)return;if(!navigator.onLine){setSt("📴 hors connexion : envoi dès le retour du réseau");return}setSt("☁ envoi…");fetch(CFG.url,{method:"POST",body:JSON.stringify({token:CFG.token||"",rows:rowsSheet()})}).then(function(r){return r.json()}).then(function(r){if(r.ok){setDirty(false);var d=new Date();setSt("☁ envoyé à "+d.getHours()+":"+String(d.getMinutes()).padStart(2,"0"))}else setSt(r.error=="token"?"⚠ code secret incorrect":"⚠ erreur côté Google")}).catch(function(){setSt("⚠ envoi impossible, nouvel essai plus tard")})}
 function saveCfg(){CFG={url:document.getElementById("cu").value.trim(),token:document.getElementById("ct").value.trim()};try{localStorage.setItem("mes-visites-cfg",JSON.stringify(CFG))}catch(e){}toast("Enregistré ✓")}
+function mergePlace(nm,gp){nm=String(nm||"").trim();gp=String(gp||"").trim();if(!nm)return 0;var ex=db.places.filter(function(p){return p.name.toLowerCase()==nm.toLowerCase()})[0];if(ex){if(gp&&!ex.gps){ex.gps=gp;return 2}return 0}addPlace(nm,gp);return 1}
+function fetchPlaces(manual){if(!CFG.url){if(manual)toast("Renseigne d’abord l’adresse du script (Export)");return}if(!navigator.onLine){if(manual)toast("Pas de réseau");return}fetch(CFG.url+"?token="+encodeURIComponent(CFG.token||"")).then(function(r){return r.json()}).then(function(r){if(!r.ok){if(manual)toast(r.error=="token"?"Code secret incorrect":"Erreur côté Google");return}var a=0,u=0;r.places.forEach(function(x){var m=mergePlace(x[0],x[1]);if(m==1)a++;else if(m==2)u++});if(a||u){save();render()}if(manual||a)toast(a+" lieu(x) ajouté(s)"+(u?", "+u+" GPS complété(s)":""))}).catch(function(){if(manual)toast("Récupération impossible")})}
 function syncNow(){saveCfg();doPush()}
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
@@ -107,17 +111,13 @@ function delP(){var p=find(cur);if(confirm("Supprimer « "+p.name+" » ?")){db.p
 
 function g(p){return withGps?[p.name,p.gps||""]:[p.name]}
 function cell(s){s=String(s||"");return/[\t\n\r";]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
-function tsv(sep){sep=sep||"\t";var out=[];
-  db.places.slice().sort(function(a,b){return a.name.localeCompare(b.name,"fr")}).forEach(function(p){
-    if(mode=="visit"){["v1","v2"].forEach(function(k){var v=p[k];if(!onlyDone||filled(v))out.push(g(p).concat([k.toUpperCase(),fmt(v.date),v.stade,v.comment]))})}
-    else if(!onlyDone||filled(p.v1)||filled(p.v2))out.push(g(p).concat([fmt(p.v1.date),p.v1.stade,p.v1.comment,fmt(p.v2.date),p.v2.stade,p.v2.comment]))});
-  return out.map(function(r){return r.map(cell).join(sep)}).join("\n")}
+function tsv(sep){sep=sep||"\t";return rowsAll(onlyDone,withGps).map(function(r){return r.map(cell).join(sep)}).join("\n")}
 
 function vExport(){
   var h='<h1><button onclick="go(\'list\')">← Retour</button>Export</h1>';
   h+='<div class="card"><h3>Synchronisation Google Sheets</h3><p class="mu">Colle l’adresse du script Google et ton code secret (voir le guide).</p><label>Adresse du script</label><input id="cu" value="'+esc(CFG.url||"")+'" placeholder="https://script.google.com/macros/s/…/exec"><label>Code secret</label><input id="ct" value="'+esc(CFG.token||"")+'"><div class="row" style="margin-top:10px"><button onclick="saveCfg()">Enregistrer</button><button class="p" onclick="syncNow()">Envoyer maintenant</button></div><p class="mu" id="st2">'+esc(sync.status)+'</p></div>';
-  h+='<div class="card"><label>Format</label><select onchange="mode=this.value;render()"><option value="visit"'+(mode=="visit"?' selected':'')+'>Une ligne par visite (lieu, V1/V2, date, stade, commentaire)</option><option value="place"'+(mode=="place"?' selected':'')+'>Une ligne par lieu (V1 et V2 côte à côte)</option></select>'
-  +'<label><input type="checkbox" style="width:auto" '+(onlyDone?'checked':'')+' onchange="onlyDone=this.checked;render()"> Seulement les visites renseignées</label>'
+  h+='<div class="card">'
+  +'<label><input type="checkbox" style="width:auto" '+(onlyDone?'checked':'')+' onchange="onlyDone=this.checked;render()"> Seulement les lieux déjà visités (V1 ou V2)</label>'
   +'<label><input type="checkbox" style="width:auto" '+(withGps?'checked':'')+' onchange="withGps=this.checked;render()"> Inclure le point GPS</label>'
   +'<label>Aperçu (colonnes séparées par tabulations)</label><textarea id="out" readonly style="min-height:140px;font-size:13px">'+esc(tsv())+'</textarea>'
   +'<div class="row" style="margin-top:10px"><button class="p" onclick="copyTxt(\'out\')">Copier pour Excel</button><button onclick="mail()">Envoyer par mail</button></div><div class="row" style="margin-top:8px"><button onclick="dl()">Télécharger (.csv)</button></div></div>';
@@ -128,13 +128,14 @@ function copyTxt(id){var t=document.getElementById(id);
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t.value).then(function(){toast("Copié ✓")},fb)}else fb()}
 function dl(){var b=new Blob(["\ufeff"+tsv(";")],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="visites.csv";document.body.appendChild(a);a.click();a.remove()}
 function mail(){var u="mailto:?subject="+encodeURIComponent("Visites")+"&body="+encodeURIComponent(tsv());window.open(u,"_blank")}
-function vImport(){return '<h1><button onclick="go(\'list\')">← Retour</button>Importer des lieux</h1><div class="card"><p class="mu">Un lieu par ligne. Le point GPS est facultatif : écris-le après le nom, séparé par un point-virgule (ex. <i>Château de X;48.8584, 2.2945</i>). Depuis Excel, mets le lieu dans une colonne et la latitude et la longitude dans les suivantes. Les lieux déjà présents sont ignorés (leur GPS est complété s’il manquait).</p><textarea id="imp" style="min-height:200px"></textarea><button class="p" style="margin-top:8px" onclick="impP()">Importer</button></div>'}
+function vImport(){return '<h1><button onclick="go(\'list\')">← Retour</button>Importer des lieux</h1><div class="card"><h3>Depuis Google Sheets</h3><p class="mu">Remplis l’onglet « Lieux » de ta feuille (colonne A : lieu, colonne B : GPS facultatif). L’app le récupère à chaque ouverture, tu peux aussi le lancer maintenant.</p><button class="p" onclick="fetchPlaces(true)">Récupérer mes lieux</button></div><div class="card"><h3>Coller une liste</h3><p class="mu">Un lieu par ligne. Le point GPS est facultatif : écris-le après le nom, séparé par un point-virgule (ex. <i>Château de X;48.8584, 2.2945</i>). Depuis Excel, mets le lieu dans une colonne et la latitude et la longitude dans les suivantes. Les lieux déjà présents sont ignorés (leur GPS est complété s’il manquait).</p><textarea id="imp" style="min-height:200px"></textarea><button class="p" style="margin-top:8px" onclick="impP()">Importer</button></div>'}
 function impP(){var n=0;document.getElementById("imp").value.split(/\r?\n/).forEach(function(l){var m=l.split(/\t|;/),nm=(m.shift()||"").trim(),gp=m.map(function(x){return x.trim().replace(/^(-?\d+),(\d+)$/,"$1.$2")}).filter(Boolean).join(", ");if(!nm)return;var ex=db.places.filter(function(p){return p.name.toLowerCase()==nm.toLowerCase()})[0];if(ex){if(gp&&!ex.gps)ex.gps=gp}else{addPlace(nm,gp);n++}});save();toast(n+" lieu(x) ajouté(s)");go("list")}
 function restore(){try{var d=JSON.parse(document.getElementById("bk").value);if(d&&d.places&&confirm("Remplacer toutes les données actuelles ?")){db=d;save();toast("Restauré ✓");go("list")}}catch(e){toast("Texte invalide")}}
 render();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
 window.addEventListener("online",function(){if(dirty())push()});
 if(dirty())push();
+fetchPlaces(false);
 </script>
 </body>
 </html>
