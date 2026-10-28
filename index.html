@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mes visites</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1f6f5c">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Visites">
+<style>
+:root{--bg:#f5f5f2;--card:#fff;--tx:#1d1d1b;--mu:#6b6b66;--bd:#dcdcd6;--ac:#1f6f5c;--act:#fff;--ok:#2e8b57;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161614;--card:#222220;--tx:#eeeeea;--mu:#9a9a94;--bd:#3a3a36;--ac:#4cb89d;--act:#0d1f1a;--ok:#5fcf8f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#161614;--card:#222220;--tx:#eeeeea;--mu:#9a9a94;--bd:#3a3a36;--ac:#4cb89d;--act:#0d1f1a;--ok:#5fcf8f;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:12px 14px 80px}
+h1{font-size:20px;margin:6px 0 12px;display:flex;justify-content:space-between;align-items:center}
+input,textarea,select,button{font:inherit;color:var(--tx)}
+input,textarea,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--card)}
+textarea{min-height:90px;resize:vertical}
+label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
+button{border:1px solid var(--bd);background:var(--card);border-radius:10px;padding:10px 14px;cursor:pointer}
+button.p{background:var(--ac);color:var(--act);border-color:var(--ac);font-weight:600}
+button.d{color:#c0392b}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.row>button{flex:none}
+.chips{display:flex;gap:6px;margin:10px 0;flex-wrap:wrap}
+.chip{padding:6px 12px;border-radius:20px;font-size:14px}
+.chip.on{background:var(--ac);color:var(--act);border-color:var(--ac)}
+.item{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.badges{display:flex;gap:6px}
+.b{font-size:12px;padding:3px 8px;border-radius:12px;border:1px solid var(--bd);color:var(--mu)}
+.b.ok{background:var(--ok);color:var(--act);border-color:var(--ok)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 14px;margin:12px 0}
+.card h3{margin:0 0 4px;font-size:16px}
+.mu{color:var(--mu);font-size:14px}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:20px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div id="toast"></div>
+<script>
+var KEY="mes-visites-v1",db=load(),withGps=false,sync={t:null,status:""},view="list",cur=null,flt="all",q="",mode="visit",onlyDone=true;
+function load(){try{var d=JSON.parse(localStorage.getItem(KEY));if(d&&d.places)return d}catch(e){}return{places:[]}}
+var CFG=(function(){try{return JSON.parse(localStorage.getItem("mes-visites-cfg"))||{}}catch(e){return{}}})(),DK="mes-visites-dirty";
+function dirty(){try{return localStorage.getItem(DK)=="1"}catch(e){return false}}
+function setDirty(v){try{v?localStorage.setItem(DK,"1"):localStorage.removeItem(DK)}catch(e){}}
+function setSt(t){sync.status=t;["st","st2"].forEach(function(i){var e=document.getElementById(i);if(e)e.textContent=t})}
+function save(){db.updatedAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}setDirty(true);push()}
+function rowsSheet(){var o=[];db.places.slice().sort(function(a,b){return a.name.localeCompare(b.name,"fr")}).forEach(function(p){["v1","v2"].forEach(function(k){var v=p[k];if(filled(v))o.push([p.name,p.gps||"",k.toUpperCase(),fmt(v.date),v.stade,v.comment])})});return o}
+function push(){if(!CFG.url)return;clearTimeout(sync.t);setSt("⏳ envoi en attente…");sync.t=setTimeout(doPush,1500)}
+function doPush(){sync.t=null;if(!CFG.url)return;if(!navigator.onLine){setSt("📴 hors connexion : envoi dès le retour du réseau");return}setSt("☁ envoi…");fetch(CFG.url,{method:"POST",body:JSON.stringify({token:CFG.token||"",rows:rowsSheet()})}).then(function(r){return r.json()}).then(function(r){if(r.ok){setDirty(false);var d=new Date();setSt("☁ envoyé à "+d.getHours()+":"+String(d.getMinutes()).padStart(2,"0"))}else setSt(r.error=="token"?"⚠ code secret incorrect":"⚠ erreur côté Google")}).catch(function(){setSt("⚠ envoi impossible, nouvel essai plus tard")})}
+function saveCfg(){CFG={url:document.getElementById("cu").value.trim(),token:document.getElementById("ct").value.trim()};try{localStorage.setItem("mes-visites-cfg",JSON.stringify(CFG))}catch(e){}toast("Enregistré ✓")}
+function syncNow(){saveCfg();doPush()}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function blank(){return{date:"",stade:"",comment:""}}
+function addPlace(n,g){n=(n||"").trim();if(!n)return null;var p={id:uid(),name:n,gps:g||"",v1:blank(),v2:blank()};db.places.push(p);return p}
+function filled(v){return !!(v.date||v.stade||v.comment)}
+function fmt(d){if(!d)return"";var a=d.split("-");return a.length==3?a[2]+"/"+a[1]+"/"+a[0]:d}
+function toast(t){var e=document.getElementById("toast");e.textContent=t;e.className="on";setTimeout(function(){e.className=""},1800)}
+function go(v,id){view=v;cur=id||null;render();window.scrollTo(0,0)}
+
+function render(){var a=document.getElementById("app");a.innerHTML=view=="list"?vList():view=="detail"?vDetail():view=="import"?vImport():vExport()}
+
+function vList(){
+  var ps=db.places.filter(function(p){
+    if(q&&p.name.toLowerCase().indexOf(q.toLowerCase())<0)return false;
+    if(flt=="v1")return !filled(p.v1);
+    if(flt=="v2")return !filled(p.v2);
+    return true}).sort(function(a,b){return a.name.localeCompare(b.name,"fr")});
+  var d1=db.places.filter(function(p){return filled(p.v1)}).length,d2=db.places.filter(function(p){return filled(p.v2)}).length;
+  var h='<h1>Mes visites <span class="row"><button onclick="go(\'import\')">Import</button><button onclick="go(\'export\')">Export</button></span></h1>';
+  h+='<div class="mu">'+db.places.length+' lieux · V1 : '+d1+' · V2 : '+d2+' · <span id="st">'+esc(sync.status)+'</span></div>';
+  h+='<div class="row" style="margin-top:10px"><input id="np" placeholder="Nouveau lieu…" onkeydown="if(event.key==\'Enter\')newP()"><button class="p" onclick="newP()">Ajouter</button></div>';
+  h+='<input style="margin-top:10px" placeholder="Rechercher…" value="'+esc(q)+'" oninput="q=this.value;keepFocus()">';
+  h+='<div class="chips">'+[["all","Tous"],["v1","V1 à faire"],["v2","V2 à faire"]].map(function(c){return'<button class="chip'+(flt==c[0]?' on':'')+'" onclick="flt=\''+c[0]+'\';render()">'+c[1]+'</button>'}).join("")+'</div>';
+  if(!ps.length)h+='<p class="mu">Aucun lieu. Ajoute-en un ci-dessus, ou importe ta liste depuis « Export ».</p>';
+  ps.forEach(function(p){h+='<div class="item" onclick="go(\'detail\',\''+p.id+'\')"><b>'+esc(p.name)+(p.gps?' 📍':'')+'</b><span class="badges"><span class="b'+(filled(p.v1)?' ok':'')+'">V1</span><span class="b'+(filled(p.v2)?' ok':'')+'">V2</span></span></div>'});
+  return h}
+function keepFocus(){render();var i=document.querySelectorAll("input")[1];if(i){i.focus();var l=i.value.length;i.setSelectionRange(l,l)}}
+function newP(){var i=document.getElementById("np"),p=addPlace(i.value);if(p){save();go("detail",p.id)}}
+
+function find(id){return db.places.filter(function(p){return p.id==id})[0]}
+function vDetail(){
+  var p=find(cur);if(!p)return vList();
+  var h='<h1><button onclick="go(\'list\')">← Retour</button><button class="d" onclick="delP()">Supprimer</button></h1>';
+  h+='<input value="'+esc(p.name)+'" oninput="find(cur).name=this.value;save()" style="font-weight:600;font-size:18px">';
+  h+='<label>Point GPS (facultatif)</label><div class="row"><input id="gps" placeholder="ex. 48.8584, 2.2945" value="'+esc(p.gps||"")+'" oninput="find(cur).gps=this.value;save()"><button onclick="getGps()">Ma position</button></div>';
+  if(p.gps)h+='<a class="mu" target="_blank" href="https://www.google.com/maps?q='+encodeURIComponent(p.gps)+'">Ouvrir dans Plans</a>';
+  ["v1","v2"].forEach(function(k){var v=p[k];
+    h+='<div class="card"><h3>Visite '+k.toUpperCase()+'</h3>'
+    +'<label>Date</label><div class="row"><input type="date" id="d'+k+'" value="'+esc(v.date)+'" oninput="upd(\''+k+'\',\'date\',this.value)"><button onclick="today(\''+k+'\')">Aujourd’hui</button></div>'
+    +'<label>Stade</label><input value="'+esc(v.stade)+'" oninput="upd(\''+k+'\',\'stade\',this.value)">'
+    +'<label>Commentaire</label><textarea oninput="upd(\''+k+'\',\'comment\',this.value)">'+esc(v.comment)+'</textarea></div>'});
+  return h+'<p class="mu">Enregistrement automatique sur ce téléphone.</p>'}
+function upd(k,f,val){find(cur)[k][f]=val;save()}
+function getGps(){if(!navigator.geolocation){toast("Position indisponible");return}navigator.geolocation.getCurrentPosition(function(r){find(cur).gps=r.coords.latitude.toFixed(6)+", "+r.coords.longitude.toFixed(6);save();render()},function(){toast("Position refusée ou indisponible")},{enableHighAccuracy:true,timeout:15000})}
+function today(k){var d=new Date(),s=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");upd(k,"date",s);document.getElementById("d"+k).value=s}
+function delP(){var p=find(cur);if(confirm("Supprimer « "+p.name+" » ?")){db.places=db.places.filter(function(x){return x.id!=cur});save();go("list")}}
+
+function g(p){return withGps?[p.name,p.gps||""]:[p.name]}
+function cell(s){s=String(s||"");return/[\t\n\r";]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function tsv(sep){sep=sep||"\t";var out=[];
+  db.places.slice().sort(function(a,b){return a.name.localeCompare(b.name,"fr")}).forEach(function(p){
+    if(mode=="visit"){["v1","v2"].forEach(function(k){var v=p[k];if(!onlyDone||filled(v))out.push(g(p).concat([k.toUpperCase(),fmt(v.date),v.stade,v.comment]))})}
+    else if(!onlyDone||filled(p.v1)||filled(p.v2))out.push(g(p).concat([fmt(p.v1.date),p.v1.stade,p.v1.comment,fmt(p.v2.date),p.v2.stade,p.v2.comment]))});
+  return out.map(function(r){return r.map(cell).join(sep)}).join("\n")}
+
+function vExport(){
+  var h='<h1><button onclick="go(\'list\')">← Retour</button>Export</h1>';
+  h+='<div class="card"><h3>Synchronisation Google Sheets</h3><p class="mu">Colle l’adresse du script Google et ton code secret (voir le guide).</p><label>Adresse du script</label><input id="cu" value="'+esc(CFG.url||"")+'" placeholder="https://script.google.com/macros/s/…/exec"><label>Code secret</label><input id="ct" value="'+esc(CFG.token||"")+'"><div class="row" style="margin-top:10px"><button onclick="saveCfg()">Enregistrer</button><button class="p" onclick="syncNow()">Envoyer maintenant</button></div><p class="mu" id="st2">'+esc(sync.status)+'</p></div>';
+  h+='<div class="card"><label>Format</label><select onchange="mode=this.value;render()"><option value="visit"'+(mode=="visit"?' selected':'')+'>Une ligne par visite (lieu, V1/V2, date, stade, commentaire)</option><option value="place"'+(mode=="place"?' selected':'')+'>Une ligne par lieu (V1 et V2 côte à côte)</option></select>'
+  +'<label><input type="checkbox" style="width:auto" '+(onlyDone?'checked':'')+' onchange="onlyDone=this.checked;render()"> Seulement les visites renseignées</label>'
+  +'<label><input type="checkbox" style="width:auto" '+(withGps?'checked':'')+' onchange="withGps=this.checked;render()"> Inclure le point GPS</label>'
+  +'<label>Aperçu (colonnes séparées par tabulations)</label><textarea id="out" readonly style="min-height:140px;font-size:13px">'+esc(tsv())+'</textarea>'
+  +'<div class="row" style="margin-top:10px"><button class="p" onclick="copyTxt(\'out\')">Copier pour Excel</button><button onclick="mail()">Envoyer par mail</button></div><div class="row" style="margin-top:8px"><button onclick="dl()">Télécharger (.csv)</button></div></div>';
+  h+='<div class="card"><h3>Sauvegarde complète</h3><p class="mu">Copie le texte et garde-le (mail, notes) pour tout restaurer plus tard.</p><textarea id="bk" style="min-height:70px;font-size:12px">'+esc(JSON.stringify(db))+'</textarea><div class="row" style="margin-top:8px"><button onclick="copyTxt(\'bk\')">Copier</button><button onclick="restore()">Restaurer depuis ce texte</button></div></div>';
+  return h}
+function copyTxt(id){var t=document.getElementById(id);
+  function fb(){t.removeAttribute("readonly");t.select();t.setSelectionRange(0,999999);var ok=false;try{ok=document.execCommand("copy")}catch(e){}toast(ok?"Copié ✓":"Sélectionne le texte et copie-le à la main")}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t.value).then(function(){toast("Copié ✓")},fb)}else fb()}
+function dl(){var b=new Blob(["\ufeff"+tsv(";")],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="visites.csv";document.body.appendChild(a);a.click();a.remove()}
+function mail(){var u="mailto:?subject="+encodeURIComponent("Visites")+"&body="+encodeURIComponent(tsv());window.open(u,"_blank")}
+function vImport(){return '<h1><button onclick="go(\'list\')">← Retour</button>Importer des lieux</h1><div class="card"><p class="mu">Un lieu par ligne. Le point GPS est facultatif : écris-le après le nom, séparé par un point-virgule (ex. <i>Château de X;48.8584, 2.2945</i>). Depuis Excel, mets le lieu dans une colonne et la latitude et la longitude dans les suivantes. Les lieux déjà présents sont ignorés (leur GPS est complété s’il manquait).</p><textarea id="imp" style="min-height:200px"></textarea><button class="p" style="margin-top:8px" onclick="impP()">Importer</button></div>'}
+function impP(){var n=0;document.getElementById("imp").value.split(/\r?\n/).forEach(function(l){var m=l.split(/\t|;/),nm=(m.shift()||"").trim(),gp=m.map(function(x){return x.trim().replace(/^(-?\d+),(\d+)$/,"$1.$2")}).filter(Boolean).join(", ");if(!nm)return;var ex=db.places.filter(function(p){return p.name.toLowerCase()==nm.toLowerCase()})[0];if(ex){if(gp&&!ex.gps)ex.gps=gp}else{addPlace(nm,gp);n++}});save();toast(n+" lieu(x) ajouté(s)");go("list")}
+function restore(){try{var d=JSON.parse(document.getElementById("bk").value);if(d&&d.places&&confirm("Remplacer toutes les données actuelles ?")){db=d;save();toast("Restauré ✓");go("list")}}catch(e){toast("Texte invalide")}}
+render();
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
+window.addEventListener("online",function(){if(dirty())push()});
+if(dirty())push();
+</script>
+</body>
+</html>
