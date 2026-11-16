@@ -46,7 +46,7 @@ button.d{color:#c0392b}
 <main id="app"></main>
 <div id="toast"></div>
 <script>
-var KEY="mes-visites-v1",db=load(),withGps=false,sync={t:null,status:""},view="list",cur=null,flt="all",q="",mode="visit",onlyDone=true;
+var KEY="mes-visites-v1",db=load(),withGps=false,sync={t:null,status:""},view="home",cur=null,flt="all",q="",mode="visit",onlyDone=true;
 function load(){try{var d=JSON.parse(localStorage.getItem(KEY));if(d&&d.places)return d}catch(e){}return{places:[]}}
 var CFG=(function(){try{return JSON.parse(localStorage.getItem("mes-visites-cfg"))||{}}catch(e){return{}}})(),DK="mes-visites-dirty";
 function dirty(){try{return localStorage.getItem(DK)=="1"}catch(e){return false}}
@@ -71,7 +71,7 @@ function fmt(d){if(!d)return"";var a=d.split("-");return a.length==3?a[2]+"/"+a[
 function toast(t){var e=document.getElementById("toast");e.textContent=t;e.className="on";setTimeout(function(){e.className=""},1800)}
 function go(v,id){view=v;cur=id||null;render();window.scrollTo(0,0)}
 
-function render(){var a=document.getElementById("app");a.innerHTML=view=="list"?vList():view=="detail"?vDetail():view=="import"?vImport():vExport()}
+function render(){var a=document.getElementById("app");a.innerHTML=view=="home"?vHome():view=="xlist"?vXList():view=="xdetail"?vXDetail():view=="ximport"?vXImport():view=="xexport"?vXExport():view=="list"?vList():view=="detail"?vDetail():view=="import"?vImport():vExport()}
 
 function vList(){
   var ps=db.places.filter(function(p){
@@ -80,7 +80,7 @@ function vList(){
     if(flt=="v2")return !filled(p.v2);
     return true}).sort(function(a,b){return a.name.localeCompare(b.name,"fr")});
   var d1=db.places.filter(function(p){return filled(p.v1)}).length,d2=db.places.filter(function(p){return filled(p.v2)}).length;
-  var h='<h1>Mes visites <span class="row"><button onclick="go(\'import\')">Import</button><button onclick="go(\'export\')">Export</button></span></h1>';
+  var h='<h1><button onclick="go(\'home\')">←</button>Homologation <span class="row"><button onclick="go(\'import\')">Import</button><button onclick="go(\'export\')">Export</button></span></h1>';
   h+='<div class="mu">'+db.places.length+' lieux · V1 : '+d1+' · V2 : '+d2+' · <span id="st">'+esc(sync.status)+'</span></div>';
   h+='<div class="row" style="margin-top:10px"><input id="np" placeholder="Nouveau lieu…" onkeydown="if(event.key==\'Enter\')newP()"><button class="p" onclick="newP()">Ajouter</button></div>';
   h+='<input style="margin-top:10px" placeholder="Rechercher…" value="'+esc(q)+'" oninput="q=this.value;keepFocus()">';
@@ -131,11 +131,83 @@ function mail(){var u="mailto:?subject="+encodeURIComponent("Visites")+"&body="+
 function vImport(){return '<h1><button onclick="go(\'list\')">← Retour</button>Importer des lieux</h1><div class="card"><h3>Depuis Google Sheets</h3><p class="mu">Remplis l’onglet « Lieux » de ta feuille (colonne A : lieu, colonne B : GPS facultatif). L’app le récupère à chaque ouverture, tu peux aussi le lancer maintenant.</p><button class="p" onclick="fetchPlaces(true)">Récupérer mes lieux</button></div><div class="card"><h3>Coller une liste</h3><p class="mu">Un lieu par ligne. Le point GPS est facultatif : écris-le après le nom, séparé par un point-virgule (ex. <i>Château de X;48.8584, 2.2945</i>). Depuis Excel, mets le lieu dans une colonne et la latitude et la longitude dans les suivantes. Les lieux déjà présents sont ignorés (leur GPS est complété s’il manquait).</p><textarea id="imp" style="min-height:200px"></textarea><button class="p" style="margin-top:8px" onclick="impP()">Importer</button></div>'}
 function impP(){var n=0;document.getElementById("imp").value.split(/\r?\n/).forEach(function(l){var m=l.split(/\t|;/),nm=(m.shift()||"").trim(),gp=m.map(function(x){return x.trim().replace(/^(-?\d+),(\d+)$/,"$1.$2")}).filter(Boolean).join(", ");if(!nm)return;var ex=db.places.filter(function(p){return p.name.toLowerCase()==nm.toLowerCase()})[0];if(ex){if(gp&&!ex.gps)ex.gps=gp}else{addPlace(nm,gp);n++}});save();toast(n+" lieu(x) ajouté(s)");go("list")}
 function restore(){try{var d=JSON.parse(document.getElementById("bk").value);if(d&&d.places&&confirm("Remplacer toutes les données actuelles ?")){db=d;save();toast("Restauré ✓");go("list")}}catch(e){toast("Texte invalide")}}
+/* ===== Module Expérimentation ===== */
+var KEYX="mes-essais-v1",dbx=loadX(),syncx={t:null,status:""},DKX="mes-essais-dirty",xinfo=false;
+function loadX(){try{var d=JSON.parse(localStorage.getItem(KEYX));if(d&&d.essais)return d}catch(e){}return{essais:[]}}
+function dirtyX(){try{return localStorage.getItem(DKX)=="1"}catch(e){return false}}
+function setDirtyX(v){try{v?localStorage.setItem(DKX,"1"):localStorage.removeItem(DKX)}catch(e){}}
+function setStx(t){syncx.status=t;["stx","stx2"].forEach(function(i){var e=document.getElementById(i);if(e)e.textContent=t})}
+function saveX(){dbx.updatedAt=Date.now();try{localStorage.setItem(KEYX,JSON.stringify(dbx))}catch(e){}setDirtyX(true);pushX()}
+function tdy(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function byDate(a,b){return (a.date||"").localeCompare(b.date||"")}
+function xsorted(){return dbx.essais.slice().sort(function(a,b){return a.name.localeCompare(b.name,"fr")})}
+function xf(id){return dbx.essais.filter(function(e){return e.id==id})[0]}
+function addEssai(n,i){n=(n||"").trim();if(!n)return null;var e={id:uid(),name:n,info:i||"",entries:[]};dbx.essais.push(e);return e}
+function xrowsSheet(){var o=[];xsorted().forEach(function(e){e.entries.slice().sort(byDate).forEach(function(n){o.push([e.name,e.info||"",fmt(n.date),n.stade,n.comment])})});return o}
+
+/* Envoi vers Google Sheets (onglet « Expérimentation »). Le code secret est envoyé sous le nom « xtoken » :
+   un ancien script non mis à jour le refuse, et n'écrase donc jamais l'onglet « Visites ». */
+function pushX(){if(!CFG.url)return;clearTimeout(syncx.t);setStx("⏳ envoi en attente…");syncx.t=setTimeout(doPushX,1500)}
+function doPushX(){syncx.t=null;if(!CFG.url)return;if(!navigator.onLine){setStx("📴 hors connexion : envoi dès le retour du réseau");return}setStx("☁ envoi…");fetch(CFG.url,{method:"POST",body:JSON.stringify({module:"exp",xtoken:CFG.token||"",rows:xrowsSheet()})}).then(function(r){return r.json()}).then(function(r){if(r.ok){setDirtyX(false);var d=new Date();setStx("☁ envoyé à "+d.getHours()+":"+String(d.getMinutes()).padStart(2,"0"))}else setStx(r.error=="token"?"⚠ code secret incorrect ou script Google pas à jour":"⚠ erreur côté Google")}).catch(function(){setStx("⚠ envoi impossible, nouvel essai plus tard")})}
+function syncNowX(){saveCfg();doPushX()}
+function mergeEssai(nm,inf){nm=String(nm||"").trim();inf=String(inf||"").trim();if(!nm)return 0;var ex=dbx.essais.filter(function(e){return e.name.toLowerCase()==nm.toLowerCase()})[0];if(ex){if(inf&&!ex.info){ex.info=inf;return 2}return 0}addEssai(nm,inf);return 1}
+function fetchEssais(manual){if(!CFG.url){if(manual)toast("Renseigne d’abord l’adresse du script (Export)");return}if(!navigator.onLine){if(manual)toast("Pas de réseau");return}fetch(CFG.url+"?module=exp&xtoken="+encodeURIComponent(CFG.token||"")).then(function(r){return r.json()}).then(function(r){if(!r.ok){if(manual)toast(r.error=="token"?"Code secret incorrect ou script Google pas à jour":"Erreur côté Google");return}var a=0,u=0;r.essais.forEach(function(x){var m=mergeEssai(x[0],x[1]);if(m==1)a++;else if(m==2)u++});if(a||u){saveX();render()}if(manual||a)toast(a+" essai(s) ajouté(s)"+(u?", "+u+" parcelle(s) complétée(s)":""))}).catch(function(){if(manual)toast("Récupération impossible")})}
+
+function vHome(){return '<h1>Mes visites terrain</h1><div class="item" style="padding:20px" onclick="q=\'\';go(\'list\')"><span><b>Homologation</b><br><span class="mu">'+db.places.length+' lieux</span></span><span>›</span></div><div class="item" style="padding:20px" onclick="q=\'\';go(\'xlist\')"><span><b>Expérimentation</b><br><span class="mu">'+dbx.essais.length+' essais</span></span><span>›</span></div>'}
+
+function vXList(){
+  var es=xsorted().filter(function(e){return !q||e.name.toLowerCase().indexOf(q.toLowerCase())>=0});
+  var h='<h1><button onclick="go(\'home\')">←</button>Expérimentation <span class="row"><button onclick="go(\'ximport\')">Import</button><button onclick="go(\'xexport\')">Export</button></span></h1>';
+  h+='<div class="mu">'+dbx.essais.length+' essais · <span id="stx">'+esc(syncx.status)+'</span></div>';
+  h+='<div class="row" style="margin-top:10px"><input id="np" placeholder="Nouvel essai…" onkeydown="if(event.key==\'Enter\')newE()"><button class="p" onclick="newE()">Ajouter</button></div>';
+  h+='<input style="margin-top:10px" placeholder="Rechercher…" value="'+esc(q)+'" oninput="q=this.value;keepFocus()">';
+  if(!es.length)h+='<p class="mu" style="margin-top:12px">Aucun essai. Ajoute-en un ci-dessus, ou récupère ta liste depuis « Import ».</p>';
+  es.forEach(function(e){var n=e.entries.length,l=e.entries.map(function(x){return x.date}).sort().pop();h+='<div class="item" style="margin-top:8px" onclick="go(\'xdetail\',\''+e.id+'\')"><b>'+esc(e.name)+'</b><span class="badges"><span class="b'+(n?' ok':'')+'">'+n+' entrée'+(n>1?'s':'')+'</span>'+(l?'<span class="b">'+fmt(l)+'</span>':'')+'</span></div>'});
+  return h}
+function newE(){var i=document.getElementById("np"),e=addEssai(i.value);if(e){saveX();go("xdetail",e.id)}}
+
+function vXDetail(){
+  var e=xf(cur);if(!e)return vXList();
+  var h='<h1><button onclick="go(\'xlist\')">← Retour</button><button class="d" onclick="xdelE()">Supprimer</button></h1>';
+  h+='<input value="'+esc(e.name)+'" oninput="xf(cur).name=this.value;saveX()" style="font-weight:600;font-size:18px">';
+  h+='<label>Parcelle / protocole (facultatif)</label><input value="'+esc(e.info||"")+'" oninput="xf(cur).info=this.value;saveX()">';
+  h+='<button class="p" style="margin-top:14px;width:100%" onclick="xadd()">+ Nouvelle entrée</button>';
+  if(!e.entries.length)h+='<p class="mu">Aucune entrée pour cet essai.</p>';
+  e.entries.slice().sort(function(a,b){return byDate(b,a)}).forEach(function(n){
+    h+='<div class="card"><div class="row"><input type="date" id="xd'+n.id+'" value="'+esc(n.date)+'" oninput="xu(\''+n.id+'\',\'date\',this.value)"><button onclick="xtoday(\''+n.id+'\')">Aujourd’hui</button><button class="d" onclick="xdel(\''+n.id+'\')">✕</button></div>'
+    +'<label>Stade</label><input value="'+esc(n.stade)+'" oninput="xu(\''+n.id+'\',\'stade\',this.value)">'
+    +'<label>Opérations / observations</label><textarea oninput="xu(\''+n.id+'\',\'comment\',this.value)">'+esc(n.comment)+'</textarea></div>'});
+  return h+'<p class="mu">Enregistrement automatique sur ce téléphone.</p>'}
+function xu(i,f,v){xf(cur).entries.filter(function(n){return n.id==i})[0][f]=v;saveX()}
+function xadd(){xf(cur).entries.push({id:uid(),date:tdy(),stade:"",comment:""});saveX();render()}
+function xtoday(i){xu(i,"date",tdy());document.getElementById("xd"+i).value=tdy()}
+function xdel(i){if(confirm("Supprimer cette entrée ?")){var e=xf(cur);e.entries=e.entries.filter(function(n){return n.id!=i});saveX();render()}}
+function xdelE(){var e=xf(cur);if(confirm("Supprimer l’essai « "+e.name+" » et toutes ses entrées ?")){dbx.essais=dbx.essais.filter(function(x){return x.id!=cur});saveX();go("xlist")}}
+
+function xtsv(sep){sep=sep||"\t";var out=[["Essai"].concat(xinfo?["Parcelle / protocole"]:[]).concat(["Date","Stade","Opérations / observations"])];
+  xrowsSheet().forEach(function(r){out.push([r[0]].concat(xinfo?[r[1]]:[]).concat([r[2],r[3],r[4]]))});
+  return out.map(function(r){return r.map(cell).join(sep)}).join("\n")}
+function vXExport(){
+  var h='<h1><button onclick="go(\'xlist\')">← Retour</button>Export</h1>';
+  h+='<div class="card"><h3>Synchronisation Google Sheets</h3><p class="mu">Même script et même code secret que l’Homologation. Les entrées arrivent dans l’onglet « Expérimentation » de ta feuille.</p><label>Adresse du script</label><input id="cu" value="'+esc(CFG.url||"")+'" placeholder="https://script.google.com/macros/s/…/exec"><label>Code secret</label><input id="ct" value="'+esc(CFG.token||"")+'"><div class="row" style="margin-top:10px"><button onclick="saveCfg()">Enregistrer</button><button class="p" onclick="syncNowX()">Envoyer maintenant</button></div><p class="mu" id="stx2">'+esc(syncx.status)+'</p></div>';
+  h+='<div class="card"><label><input type="checkbox" style="width:auto" '+(xinfo?'checked':'')+' onchange="xinfo=this.checked;render()"> Inclure la colonne Parcelle / protocole</label>'
+  +'<label>Aperçu (une ligne par entrée, colonnes séparées par tabulations)</label><textarea id="out" readonly style="min-height:140px;font-size:13px">'+esc(xtsv())+'</textarea>'
+  +'<div class="row" style="margin-top:10px"><button class="p" onclick="copyTxt(\'out\')">Copier pour Sheets</button><button onclick="xmail()">Envoyer par mail</button></div><div class="row" style="margin-top:8px"><button onclick="xdl()">Télécharger (.csv)</button></div></div>';
+  h+='<div class="card"><h3>Sauvegarde complète</h3><p class="mu">Copie le texte et garde-le (mail, notes) pour tout restaurer plus tard.</p><textarea id="bk" style="min-height:70px;font-size:12px">'+esc(JSON.stringify(dbx))+'</textarea><div class="row" style="margin-top:8px"><button onclick="copyTxt(\'bk\')">Copier</button><button onclick="xrestore()">Restaurer depuis ce texte</button></div></div>';
+  return h}
+function xdl(){var b=new Blob(["\ufeff"+xtsv(";")],{type:"text/csv;charset=utf-8"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="essais.csv";document.body.appendChild(a);a.click();a.remove()}
+function xmail(){window.open("mailto:?subject="+encodeURIComponent("Essais")+"&body="+encodeURIComponent(xtsv()),"_blank")}
+function xrestore(){try{var d=JSON.parse(document.getElementById("bk").value);if(d&&d.essais&&confirm("Remplacer tous les essais actuels ?")){dbx=d;saveX();toast("Restauré ✓");go("xlist")}}catch(e){toast("Texte invalide")}}
+function vXImport(){return '<h1><button onclick="go(\'xlist\')">← Retour</button>Importer des essais</h1><div class="card"><h3>Depuis Google Sheets</h3><p class="mu">Remplis l’onglet « Essais » de ta feuille (colonne A : essai, colonne B : parcelle / protocole facultatif). L’app le récupère à chaque ouverture, tu peux aussi le lancer maintenant.</p><button class="p" onclick="fetchEssais(true)">Récupérer mes essais</button></div><div class="card"><h3>Coller une liste</h3><p class="mu">Un essai par ligne. La parcelle / protocole est facultative : écris-la après le nom, séparée par un point-virgule (ex. <i>Essai fongicide;Parcelle 12</i>). Les essais déjà présents sont ignorés.</p><textarea id="imp" style="min-height:200px"></textarea><button class="p" style="margin-top:8px" onclick="impE()">Importer</button></div>'}
+function impE(){var n=0;document.getElementById("imp").value.split(/\r?\n/).forEach(function(l){var m=l.split(/\t|;/),nm=(m.shift()||"").trim();if(nm&&mergeEssai(nm,m.join(" ").trim())==1)n++});saveX();toast(n+" essai(s) ajouté(s)");go("xlist")}
+
 render();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});
-window.addEventListener("online",function(){if(dirty())push()});
+window.addEventListener("online",function(){if(dirty())push();if(dirtyX())pushX()});
 if(dirty())push();
+if(dirtyX())pushX();
 fetchPlaces(false);
+fetchEssais(false);
 </script>
 </body>
 </html>
